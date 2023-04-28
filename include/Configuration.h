@@ -103,6 +103,7 @@ namespace uniset
             xmlNode* getXMLServicesSection()  noexcept;
             xmlNode* getXMLNodesSection() noexcept;
             xmlNode* getXMLObjectNode( uniset::ObjectId ) const noexcept;
+            xmlNode* getXMLMessagesSection()  noexcept;
 
             UniversalIO::IOType getIOType( uniset::ObjectId ) const noexcept;
             UniversalIO::IOType getIOType( const std::string& name ) const noexcept;
@@ -224,6 +225,7 @@ namespace uniset
             xmlNode* xmlControllersSec = { 0 };
             xmlNode* xmlServicesSec = { 0 };
             xmlNode* xmlNodesSec = { 0 };
+            xmlNode* xmlMessagesSec = { 0 };
 
             ObjectId localDBServer = { uniset::DefaultObjectId };
             ObjectId localNode = { uniset::DefaultObjectId };
