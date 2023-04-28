@@ -257,6 +257,36 @@ namespace uniset
                 throw uniset::SystemError(err.str());
             }
 
+		    UniXML::iterator it(unixml->findNode(unixml->getFirstNode(), "messages"));
+	        if( !it )
+	        {
+	            uinfo << "(Configuration:init): not found <messages> node in "  << fileConfName << endl;
+	        }
+			else
+			{
+		        if( it.getIntProp("idfromfile") == 0 ) // Заполняем hash id для сообщений как message + value, если указано, что они не читаются из файла конфигурации
+				{
+					if(!it.goChildren())
+		        	{
+			            uwarn << "(Configuration:init): <messages> section is empty! "  << fileConfName << endl;
+		        	}
+		       		else
+					{
+						string sensor, value;
+				        for(; it.getCurrent(); it++)
+	        			{
+	            			 sensor = it.getProp("sensorname");
+	            			 if( sensor == "" )
+			            		uwarn << "(Configuration:init): Sensor name is empty! "  << fileConfName << endl;
+	            			 value = it.getProp("value");
+	            			 if( value == "" )
+			            		uwarn << "(Configuration:init): Value is empty! "  << fileConfName << endl;
+	            			
+	            			it.setProp("id", std::to_string(uniset::hash32(sensor + value)));
+	        			}
+					}
+				}
+			}
 
             //    cerr << "*************** initConfiguration: xmlOpen: " << pt.getCurrent() << " msec " << endl;
             //    pt.reset();
@@ -1451,6 +1481,15 @@ namespace uniset
 
         xmlNodesSec = unixml->findNode(unixml->getFirstNode(), "nodes");
         return xmlNodesSec;
+    }
+    // -------------------------------------------------------------------------
+    xmlNode* Configuration::getXMLMessagesSection() noexcept
+    {
+        if( xmlMessagesSec )
+            return xmlMessagesSec;
+
+        xmlMessagesSec = unixml->findNode(unixml->getFirstNode(), "messages");
+        return xmlMessagesSec;
     }
     // -------------------------------------------------------------------------
     xmlNode* Configuration::getXMLObjectNode( uniset::ObjectId id ) const noexcept
