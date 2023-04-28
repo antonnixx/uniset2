@@ -3,7 +3,7 @@
     <name>dict_sensors</name>
     <source>
       <file>
-        <path>/usr/share/uniset/data/dict-sensors.csv</path>
+        <path>/usr/share/uniset2/data/dict-sensors.csv</path>
         <format>CSV</format>
       </file>
     </source>
@@ -41,7 +41,7 @@
     <name>dict_objects</name>
     <source>
       <file>
-        <path>/usr/share/uniset/data/dict-objects.csv</path>
+        <path>/usr/share/uniset2/data/dict-objects.csv</path>
         <format>CSV</format>
       </file>
     </source>
@@ -69,7 +69,7 @@
     <name>dict_nodes</name>
     <source>
       <file>
-        <path>/usr/share/uniset/data/dict-nodes.csv</path>
+        <path>/usr/share/uniset2/data/dict-nodes.csv</path>
         <format>CSV</format>
       </file>
     </source>
@@ -95,6 +95,49 @@
         <name>textname</name>
         <type>String</type>
         <null_value></null_value>
+      </attribute>
+    </structure>
+</dictionary>
+<dictionary>
+    <name>dict_messages</name>
+    <source>
+      <file>
+        <path>/usr/share/uniset2/data/dict-messages.csv</path>
+        <format>CSV</format>
+      </file>
+    </source>
+    <lifetime>30</lifetime>
+    <layout>
+      <hashed />
+    </layout>
+    <structure>
+      <id>
+          <name>id</name>
+      </id>
+      <attribute>
+        <name>sensorname</name>
+        <type>String</type>
+        <null_value></null_value>
+      </attribute>
+      <attribute>
+        <name>value</name>
+        <type>Float</type>
+        <null_value></null_value>
+      </attribute>
+      <attribute>
+        <name>message</name>
+        <type>String</type>
+        <null_value></null_value>
+      </attribute>
+      <attribute>
+        <name>mtype</name>
+        <type>String</type>
+        <null_value></null_value>
+      </attribute>
+      <attribute>
+        <name>default</name>
+        <type>int</type>
+        <null_value>0</null_value>
       </attribute>
     </structure>
 </dictionary>
