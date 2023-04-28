@@ -231,6 +231,13 @@ namespace uniset
             std::shared_ptr<clickhouse::ColumnArray> arrTagKeys;
             std::shared_ptr<clickhouse::ColumnArray> arrTagValues;
 
+            std::shared_ptr<clickhouse::ColumnDateTime> colTimeStampMsg;
+            std::shared_ptr<clickhouse::ColumnUInt64> colTimeUsecMsg;
+            std::shared_ptr<clickhouse::ColumnFloat64> colValueMsg;
+            std::shared_ptr<clickhouse::ColumnString> colNameMsg;
+            std::shared_ptr<clickhouse::ColumnString> colMessageMsg;
+            std::shared_ptr<clickhouse::ColumnEnum8> colMTypeMsg;
+
             void createColumns();
             void clearData();
             static TagList parseTags( const std::string& tags );
@@ -238,6 +245,7 @@ namespace uniset
             std::unique_ptr<uniset::ClickHouseTagsConfig> dyntags;
 
             std::string fullTableName;
+            std::string fullMsgTableName;
             std::unique_ptr<ClickHouseInterface> db;
 
             std::string dbhost;
@@ -249,6 +257,9 @@ namespace uniset
         private:
             std::string prefix;
             bool connect_ok = { false };
+
+			bool msgwrite; // Писать сообщения в отдельную таблицу message по датчикам
+			bool nomsgtxtstor; //Не хранить текст сообщения
     };
     // --------------------------------------------------------------------------
 } // end of namespace uniset

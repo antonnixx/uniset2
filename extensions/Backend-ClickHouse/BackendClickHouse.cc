@@ -82,7 +82,6 @@ void BackendClickHouse::init( xmlNode* cnode )
     UniXML::iterator it(cnode);
 
     auto conf = uniset_conf();
-
     dbhost = conf->getArg2Param("--" + prefix + "-dbhost", it.getProp("dbhost"), "localhost");
     dbport = conf->getArgPInt("--" + prefix + "-dbport", it.getProp("dbport"), 9000);
     dbuser = conf->getArg2Param("--" + prefix + "-dbuser", it.getProp("dbuser"), "");
@@ -95,6 +94,9 @@ void BackendClickHouse::init( xmlNode* cnode )
 
     const string tblname = conf->getArg2Param("--" + prefix + "-dbtablename", it.getProp("dtablebname"), "main_history");
     fullTableName = dbname.empty() ? tblname : dbname + "." + tblname;
+
+    const string msgtblname = conf->getArg2Param("--" + prefix + "-dbmsgtablename", it.getProp("dbmsgtablebname"), "main_messages");
+    fullMsgTableName = dbname.empty() ? msgtblname : dbname + "." + msgtblname;
 
     int sz = conf->getArgPInt("--" + prefix + "-uniset-object-size-message-queue", it.getProp("sizeOfMessageQueue"), 10000);
 
@@ -164,6 +166,25 @@ void BackendClickHouse::init( xmlNode* cnode )
             dyntags->initFromItem(conf, it1);
         }
 
+	    if( findArgParam("--" + prefix + "-msgwrite", conf->getArgc(), conf->getArgv()) != -1 )
+		{
+			myinfo <<  myname << "(init): Write messages active..." << endl;
+	        msgwrite = true;
+		    if( findArgParam("--" + prefix + "-msgwrite-notext", conf->getArgc(), conf->getArgv()) != -1 )
+			{
+				myinfo <<  myname << "(init): No messages text storage in db..." << endl;
+		        nomsgtxtstor = true;
+		    }
+		    else
+		    {
+		        nomsgtxtstor = false;
+			}
+	    }
+	    else
+	    {
+	        msgwrite = false;
+		}
+
         if( clickhouseParams.empty() )
         {
             ostringstream err;
@@ -171,7 +192,6 @@ void BackendClickHouse::init( xmlNode* cnode )
             mycrit << err.str() << endl;
             throw SystemError(err.str());
         }
-
     }
 
     myinfo << myname << "(init): " << clickhouseParams.size() << " sensors.." << endl;
@@ -187,6 +207,13 @@ void BackendClickHouse::createColumns()
     colProducer = std::make_shared<clickhouse::ColumnString>();
     arrTagKeys = std::make_shared<clickhouse::ColumnArray>(std::make_shared<clickhouse::ColumnString>());
     arrTagValues = std::make_shared<clickhouse::ColumnArray>(std::make_shared<clickhouse::ColumnString>());
+
+    colTimeStampMsg = std::make_shared<clickhouse::ColumnDateTime>();
+    colTimeUsecMsg = std::make_shared<clickhouse::ColumnUInt64>();
+    colValueMsg = std::make_shared<clickhouse::ColumnFloat64>();
+    colNameMsg = std::make_shared<clickhouse::ColumnString>();
+    colMessageMsg = std::make_shared<clickhouse::ColumnString>();
+    colMTypeMsg = std::make_shared<clickhouse::ColumnEnum8>(clickhouse::Type::CreateEnum8({{"Common", 1}, {"Info", 2}, {"Normal", 3}, {"Caution", 4}, {"Warning", 5}, {"Alarm", 6}, {"Emergency", 7}}));
 }
 //--------------------------------------------------------------------------------------------
 void BackendClickHouse::clearData()
@@ -199,6 +226,16 @@ void BackendClickHouse::clearData()
     colProducer->Clear();
     arrTagKeys->Clear();
     arrTagValues->Clear();
+
+	if( msgwrite )
+	{
+	    colTimeStampMsg->Clear();
+	    colTimeUsecMsg->Clear();
+	    colValueMsg->Clear();
+	    colNameMsg->Clear();
+	    colMessageMsg->Clear();
+	    colMTypeMsg->Clear();
+	}
 }
 //--------------------------------------------------------------------------------
 void BackendClickHouse::help_print( int argc, const char* const* argv )
@@ -235,6 +272,8 @@ void BackendClickHouse::help_print( int argc, const char* const* argv )
     cout << "--clickhouse-run-logserver      - run logserver. Default: localhost:id" << endl;
     cout << "--clickhouse-logserver-host ip  - listen ip. Default: localhost" << endl;
     cout << "--clickhouse-logserver-port num - listen port. Default: ID" << endl;
+    cout << "--prefix-msgwrite  - Write messages from sensors into table messages" << endl;
+    cout << "--prefix-msgwrite-notext  - No storage messages text in table messages" << endl;
     cout << LogServer::help_print("prefix-logserver") << endl;
 }
 // -----------------------------------------------------------------------------
@@ -393,12 +432,40 @@ void BackendClickHouse::sensorInfo( const uniset::SensorMessage* sm )
             }
         }
 
+		if( msgwrite )
+		{
+			UniXML::iterator it(uniset_conf()->getNode("messages"));
+			if(!it.goChildren())
+			{
+				mywarn << myname <<" Configure section messages is not found";
+			}
+			else
+			{
+				string value = std::to_string(sm->value);
+				for(; it.getCurrent(); it++)
+		        {
+					if( it.getProp("sensor") == oinf->name && it.getProp("value") == value ) //нашли сообщение для этого датчика с таким значением
+					{
+				        colTimeStampMsg->Append(sm->sm_tv.tv_sec);
+				        colTimeUsecMsg->Append(sm->sm_tv.tv_nsec);
+				        colValueMsg->Append(sm->value);
+				        colNameMsg->Append(oinf->name);
+				    	colMessageMsg->Append(it.getProp("message"));
+   	    				colMTypeMsg->Append(it.getProp("mtype"));
+						break;
+					}
+				}
+			}
+
+        }
+        
         if( !timerIsOn )
         {
             timerIsOn = true;
             askTimer(tmFlushBuffer, bufSyncTime, 1);
             return;
         }
+
     }
     catch( const uniset::Exception& ex )
     {
@@ -476,6 +543,38 @@ bool BackendClickHouse::flushBuffer()
         mycrit << myname << "(flushBuffer): error: " << db->error() << endl;
         return false;
     }
+
+	if( msgwrite )
+	{
+		if( nomsgtxtstor )
+		{
+		    clickhouse::Block blk(4, colTimeStampMsg->Size());
+		    blk.AppendColumn("timestamp", colTimeStampMsg);
+		    blk.AppendColumn("time_usec", colTimeUsecMsg);
+		    blk.AppendColumn("value", colValueMsg);
+		    blk.AppendColumn("name", colNameMsg);
+		    if( !db->insert(fullMsgTableName, blk) )
+		    {
+		        mycrit << myname << "(flushBuffer): msgwrite error: " << db->error() << endl;
+		        return false;
+			}
+		}
+		else
+		{
+		    clickhouse::Block blk(6, colTimeStampMsg->Size());
+		    blk.AppendColumn("timestamp", colTimeStampMsg);
+		    blk.AppendColumn("time_usec", colTimeUsecMsg);
+		    blk.AppendColumn("value", colValueMsg);
+		    blk.AppendColumn("name", colNameMsg);
+		    blk.AppendColumn("mtype", colMTypeMsg);
+		    blk.AppendColumn("message", colMessageMsg);
+		    if( !db->insert(fullMsgTableName, blk) )
+		    {
+		        mycrit << myname << "(flushBuffer): msgwrite error: " << db->error() << endl;
+		        return false;
+		    }
+	    }
+	}
 
     clearData();
     return true;
